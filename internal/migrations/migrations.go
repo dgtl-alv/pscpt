@@ -3,8 +3,11 @@ package migrations
 import "database/sql"
 
 func Run(db *sql.DB) error {
-	_, err := db.Exec(schema)
-	return err
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+	_, _ = db.Exec(`ALTER TABLE ps_month_snapshots ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`)
+	return nil
 }
 
 const schema = `
@@ -44,6 +47,31 @@ CREATE TABLE IF NOT EXISTS manual_uploads (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
 );
+CREATE TABLE IF NOT EXISTS ps_month_rows (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  snapshot_id BIGINT NOT NULL,
+  period CHAR(7) NOT NULL,
+  ps_employee_id VARCHAR(80) NOT NULL,
+  ps_name VARCHAR(180) NOT NULL,
+  ps_email VARCHAR(190) NULL,
+  aec VARCHAR(160) NULL,
+  region VARCHAR(120) NULL,
+  employment_status VARCHAR(40) NULL,
+  individual_factor_json JSON NULL,
+  capability_talenta_json JSON NULL,
+  capability_moodle_json JSON NULL,
+  capability_lead_json JSON NULL,
+  leadership_json JSON NULL,
+  sales_performance_json JSON NULL,
+  controls_json JSON NULL,
+  metrics_json JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_snapshot_ps (snapshot_id, ps_employee_id),
+  KEY idx_period_ps (period, ps_employee_id),
+  KEY idx_aec_region (aec, region),
+  FOREIGN KEY (snapshot_id) REFERENCES ps_month_snapshots(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS ps_month_snapshots (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   period CHAR(7) NOT NULL,
@@ -51,6 +79,7 @@ CREATE TABLE IF NOT EXISTS ps_month_snapshots (
   source_summary JSON NULL,
   created_by BIGINT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_period (period),
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );

@@ -15,9 +15,9 @@ function App(){
   useEffect(()=>{api('/api/auth/me').then(d=>{setUser(d.user); setView('dashboard')}).catch(()=>{})},[]);
   const authed = (u)=>{setUser(u); setView('dashboard'); setMsg('')};
   return <>
-    <header className="topbar"><div className="brand"><span>PSCPT</span><small>PS Correlation Platform</small></div><nav>{user?<><button onClick={()=>setView('dashboard')}>Dashboard</button><button onClick={()=>setView('uploads')}>Uploads</button><button onClick={()=>setView('change')}>Change Password</button><button onClick={async()=>{await api('/api/auth/logout',{});setUser(null);setView('landing')}}>Logout</button></>:<><button onClick={()=>setView('landing')}>Home</button><button onClick={()=>setView('login')}>Login</button><button className="solid" onClick={()=>setView('register')}>Register</button></>}</nav></header>
+    <header className="topbar"><div className="brand"><span>PSCPT</span><small>PS Correlation Platform</small></div><nav>{user?<><button onClick={()=>setView('dashboard')}>Dashboard</button><button onClick={()=>setView('uploads')}>Uploads</button><button onClick={()=>setView('psmonth')}>PS-Month</button><button onClick={()=>setView('change')}>Change Password</button><button onClick={async()=>{await api('/api/auth/logout',{});setUser(null);setView('landing')}}>Logout</button></>:<><button onClick={()=>setView('landing')}>Home</button><button onClick={()=>setView('login')}>Login</button><button className="solid" onClick={()=>setView('register')}>Register</button></>}</nav></header>
     {msg && <div className="toast">{msg}</div>}
-    {view==='landing' && <Landing go={setView}/>} {view==='login' && <Auth mode="login" done={authed}/>} {view==='register' && <Auth mode="register" done={authed}/>} {view==='forgot' && <Forgot setMsg={setMsg}/>} {view==='change' && <Change setMsg={setMsg}/>} {view==='dashboard' && <Dashboard user={user}/>} {view==='uploads' && <Uploads/>} 
+    {view==='landing' && <Landing go={setView}/>} {view==='login' && <Auth mode="login" done={authed}/>} {view==='register' && <Auth mode="register" done={authed}/>} {view==='forgot' && <Forgot setMsg={setMsg}/>} {view==='change' && <Change setMsg={setMsg}/>} {view==='dashboard' && <Dashboard user={user}/>} {view==='uploads' && <Uploads/>} {view==='psmonth' && <PSMonth/>} 
     {(view==='login'||view==='register') && <p className="switch">Forgot password? <button onClick={()=>setView('forgot')}>Reset here</button></p>}
   </>;
 }
@@ -26,6 +26,15 @@ function Auth({mode,done}){const [f,setF]=useState({name:'',email:'',password:''
 function Forgot({setMsg}){const [email,setEmail]=useState(''); const [link,setLink]=useState('');return <Form title="Forgot password" onSubmit={async e=>{e.preventDefault();const d=await api('/api/auth/forgot-password',{email});setLink(d.reset_link||'');setMsg('Reset link generated for local dev')}}><input placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)}/><button className="solid">Generate Reset Link</button>{link&&<code className="resetlink">{link}</code>}</Form>}
 function Change({setMsg}){const [f,setF]=useState({currentPassword:'',newPassword:''});return <Form title="Change password" onSubmit={async e=>{e.preventDefault();await api('/api/auth/change-password',f);setMsg('Password changed')}}><input type="password" placeholder="Current password" onChange={e=>setF({...f,currentPassword:e.target.value})}/><input type="password" placeholder="New password min 8 chars" onChange={e=>setF({...f,newPassword:e.target.value})}/><button className="solid">Change Password</button></Form>}
 function Form({title,onSubmit,children,err}){return <main className="auth"><form onSubmit={onSubmit}><h2>{title}</h2>{children}{err&&<p className="error">{err}</p>}</form></main>}
+
+
+function PSMonth(){
+  const [period,setPeriod]=useState(new Date().toISOString().slice(0,7)); const [items,setItems]=useState([]); const [msg,setMsg]=useState('');
+  const load=()=>api('/api/ps-month/snapshots').then(d=>setItems(d.snapshots||[]));
+  useEffect(()=>{load()},[]);
+  const create=async e=>{e.preventDefault();setMsg('');await api('/api/ps-month/snapshots/create',{period});setMsg('Snapshot ready for '+period);load()};
+  return <main className="dash"><h1>PS-Month Master</h1><p>1 row = 1 Product Specialist dalam 1 bulan. Ini pondasi korelasi.</p><form className="uploadbox" onSubmit={create}><input type="month" value={period} onChange={e=>setPeriod(e.target.value)}/><button className="solid">Create Snapshot</button></form>{msg&&<p className="toastline">{msg}</p>}<section className="panel"><h2>Snapshots</h2>{items.length===0?<p>No snapshots yet.</p>:<table><thead><tr><th>Period</th><th>Status</th><th>Rows</th><th>Created</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{x.period}</td><td>{x.status}</td><td>{x.row_count}</td><td>{new Date(x.created_at).toLocaleString()}</td></tr>)}</tbody></table>}</section><section className="panel"><h2>Column Groups</h2><p>Keys, individual factor, Talenta capability, Moodle capability, lead behavior, leadership, sales performance, controls, metrics JSON.</p></section></main>
+}
 
 function Uploads(){
   const [type,setType]=useState('individual_factor'); const [file,setFile]=useState(null); const [result,setResult]=useState(null); const [items,setItems]=useState([]); const [err,setErr]=useState('');

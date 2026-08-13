@@ -13,6 +13,7 @@ import (
 
 	"pscpt/internal/auth"
 	"pscpt/internal/config"
+	"pscpt/internal/psmonth"
 	"pscpt/internal/uploads"
 )
 
@@ -42,6 +43,9 @@ func (a App) Handler() http.Handler {
 	mux.HandleFunc("/api/uploads/manual", a.requireAuth(a.uploadManual))
 	mux.HandleFunc("/api/uploads/manual/list", a.requireAuth(a.listManualUploads))
 	mux.HandleFunc("/api/analysis/preview", a.requireAuth(a.preview))
+	mux.HandleFunc("/api/ps-month/snapshots", a.requireAuth(a.listPSMonthSnapshots))
+	mux.HandleFunc("/api/ps-month/snapshots/create", a.requireAuth(a.createPSMonthSnapshot))
+	mux.HandleFunc("/api/ps-month/rows", a.requireAuth(a.listPSMonthRows))
 	mux.Handle("/", spaFileServer("web/dist"))
 	return securityHeaders(mux)
 }
@@ -199,6 +203,55 @@ func (a App) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (a App) createPSMonthSnapshot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	u, err := a.currentUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	var in struct{ Period string }
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if len(in.Period) != 7 || in.Period[4] != '-' {
+		writeError(w, http.StatusBadRequest, "period must use YYYY-MM")
+		return
+	}
+	id, err := psmonth.CreateSnapshot(a.DB, in.Period, u.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "create snapshot failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "period": in.Period})
+}
+
+func (a App) listPSMonthSnapshots(w http.ResponseWriter, r *http.Request) {
+	items, err := psmonth.ListSnapshots(a.DB)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list snapshots failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"snapshots": items})
+}
+
+func (a App) listPSMonthRows(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.URL.Query().Get("snapshot_id"), 10, 64)
+	if err != nil || id < 1 {
+		writeError(w, http.StatusBadRequest, "snapshot_id required")
+		return
+	}
+	items, err := psmonth.ListRows(a.DB, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list rows failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": items})
 }
 
 func (a App) uploadManual(w http.ResponseWriter, r *http.Request) {
