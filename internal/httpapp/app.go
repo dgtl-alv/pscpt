@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"pscpt/internal/analysis"
 	"pscpt/internal/auth"
 	"pscpt/internal/config"
 	"pscpt/internal/psmonth"
@@ -43,6 +44,7 @@ func (a App) Handler() http.Handler {
 	mux.HandleFunc("/api/uploads/manual", a.requireAuth(a.uploadManual))
 	mux.HandleFunc("/api/uploads/manual/list", a.requireAuth(a.listManualUploads))
 	mux.HandleFunc("/api/analysis/preview", a.requireAuth(a.preview))
+	mux.HandleFunc("/api/analysis/correlation", a.requireAuth(a.runCorrelation))
 	mux.HandleFunc("/api/ps-month/snapshots", a.requireAuth(a.listPSMonthSnapshots))
 	mux.HandleFunc("/api/ps-month/snapshots/create", a.requireAuth(a.createPSMonthSnapshot))
 	mux.HandleFunc("/api/ps-month/rows", a.requireAuth(a.listPSMonthRows))
@@ -203,6 +205,36 @@ func (a App) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (a App) runCorrelation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var in struct {
+		SnapshotID int64    `json:"snapshot_id"`
+		Target     string   `json:"target"`
+		Features   []string `json:"features"`
+		Method     string   `json:"method"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if in.SnapshotID < 1 || in.Target == "" || len(in.Features) == 0 {
+		writeError(w, http.StatusBadRequest, "snapshot_id, target, and features required")
+		return
+	}
+	if in.Method != "" && in.Method != "pearson" && in.Method != "spearman" {
+		writeError(w, http.StatusBadRequest, "method must be pearson or spearman")
+		return
+	}
+	results, err := analysis.Run(a.DB, in.SnapshotID, in.Target, in.Features, in.Method)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "correlation failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
 func (a App) createPSMonthSnapshot(w http.ResponseWriter, r *http.Request) {
