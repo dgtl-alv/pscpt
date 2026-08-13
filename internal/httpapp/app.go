@@ -13,6 +13,7 @@ import (
 
 	"pscpt/internal/auth"
 	"pscpt/internal/config"
+	"pscpt/internal/uploads"
 )
 
 type App struct {
@@ -38,6 +39,8 @@ func (a App) Handler() http.Handler {
 	mux.HandleFunc("/api/auth/reset-password", a.resetPassword)
 	mux.HandleFunc("/api/auth/change-password", a.changePassword)
 	mux.HandleFunc("/api/dashboard/summary", a.requireAuth(a.summary))
+	mux.HandleFunc("/api/uploads/manual", a.requireAuth(a.uploadManual))
+	mux.HandleFunc("/api/uploads/manual/list", a.requireAuth(a.listManualUploads))
 	mux.HandleFunc("/api/analysis/preview", a.requireAuth(a.preview))
 	mux.Handle("/", spaFileServer("web/dist"))
 	return securityHeaders(mux)
@@ -196,6 +199,66 @@ func (a App) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (a App) uploadManual(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	u, err := a.currentUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	kind := r.FormValue("type")
+	if kind != "individual_factor" && kind != "leadership" {
+		writeError(w, http.StatusBadRequest, "type must be individual_factor or leadership")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file required")
+		return
+	}
+	defer file.Close()
+	parsed, err := uploads.Parse(file, header)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	id, err := uploads.Save(a.DB, kind, header.Filename, u.ID, parsed)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "save upload failed")
+		return
+	}
+	preview := parsed.Rows
+	if len(preview) > 5 {
+		preview = preview[:5]
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "type": kind, "filename": header.Filename, "columns": parsed.Columns, "row_count": parsed.Count, "preview": preview})
+}
+
+func (a App) listManualUploads(w http.ResponseWriter, r *http.Request) {
+	rows, err := a.DB.Query(`SELECT id, upload_type, filename, row_count, created_at FROM manual_uploads ORDER BY id DESC LIMIT 50`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list uploads failed")
+		return
+	}
+	defer rows.Close()
+	items := []map[string]any{}
+	for rows.Next() {
+		var id int64
+		var kind, filename string
+		var count int
+		var created time.Time
+		if err := rows.Scan(&id, &kind, &filename, &count, &created); err != nil {
+			writeError(w, http.StatusInternalServerError, "scan uploads failed")
+			return
+		}
+		items = append(items, map[string]any{"id": id, "type": kind, "filename": filename, "row_count": count, "created_at": created})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"uploads": items})
 }
 
 func (a App) summary(w http.ResponseWriter, r *http.Request) {

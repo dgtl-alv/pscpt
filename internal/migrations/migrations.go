@@ -33,6 +33,17 @@ CREATE TABLE IF NOT EXISTS audit_events (
   event_payload JSON NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS manual_uploads (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  upload_type ENUM('individual_factor','leadership') NOT NULL,
+  filename VARCHAR(255) NOT NULL,
+  columns_json JSON NOT NULL,
+  rows_json JSON NOT NULL,
+  row_count INT NOT NULL DEFAULT 0,
+  uploaded_by BIGINT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+);
 CREATE TABLE IF NOT EXISTS ps_month_snapshots (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   period CHAR(7) NOT NULL,
