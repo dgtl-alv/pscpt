@@ -1,0 +1,8 @@
+.env
+*.log
+tmp/
+dist/
+web/dist/
+node_modules/
+web/node_modules/
+.DS_Store

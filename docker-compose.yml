@@ -1,0 +1,35 @@
+services:
+  app:
+    build: .
+    container_name: pscpt-app
+    ports:
+      - "8091:8080"
+    environment:
+      PSCPT_ADDR: ":8080"
+      PSCPT_DSN: "pscpt:pscpt@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true"
+      PSCPT_APP_URL: "http://localhost:8091"
+      PSCPT_SESSION_SECRET: "change-me-in-production"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  db:
+    image: mysql:8.4
+    container_name: pscpt-db
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_DATABASE: pscpt
+      MYSQL_USER: pscpt
+      MYSQL_PASSWORD: pscpt
+      MYSQL_ROOT_PASSWORD: pscpt_root
+    volumes:
+      - pscpt_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-upscpt", "-ppscpt"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  pscpt_mysql:
