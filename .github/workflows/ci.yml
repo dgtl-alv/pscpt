@@ -10,6 +10,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,7 +41,8 @@ jobs:
 
       - name: Frontend install
         working-directory: web
-        run: npm ci
+        timeout-minutes: 5
+        run: npm ci --no-audit --no-fund
 
       - name: Frontend build
         working-directory: web

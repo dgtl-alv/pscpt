@@ -70,6 +70,7 @@ jobs:
           (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') }}
     runs-on: ubuntu-latest
     environment: production
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,7 +96,7 @@ jobs:
             exit 1
           fi
           go test ./...
-          npm ci --prefix web
+          npm ci --prefix web --no-audit --no-fund
           npm run build --prefix web
           mkdir -p ../secrets
           cat > ../secrets/pscpt.env <<'EOF'
