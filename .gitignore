@@ -5,4 +5,5 @@ dist/
 web/dist/
 node_modules/
 web/node_modules/
+graphify-out/
 .DS_Store
