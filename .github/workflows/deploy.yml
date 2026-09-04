@@ -1,0 +1,134 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  push:
+    tags: ['prod-*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deploy target
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+      ref:
+        description: Branch or tag to deploy
+        required: false
+        default: main
+        type: string
+
+concurrency:
+  group: pscpt-${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/prod-') && 'production' || inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: deploy staging
+    if: >-
+      ${{ (github.event_name == 'workflow_run' &&
+           github.event.workflow_run.conclusion == 'success' &&
+           github.event.workflow_run.event == 'push') ||
+          (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging') }}
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Install SSH key
+        env:
+          DEPLOY_KEY: ${{ secrets.PSCPT_STAGING_DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.PSCPT_STAGING_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.PSCPT_STAGING_DEPLOY_PORT }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/pscpt_staging_deploy
+          chmod 600 ~/.ssh/pscpt_staging_deploy
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.PSCPT_STAGING_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.PSCPT_STAGING_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.PSCPT_STAGING_DEPLOY_USER }}
+          DEPLOY_REF: ${{ inputs.ref || 'main' }}
+        run: |
+          ssh -i ~/.ssh/pscpt_staging_deploy \
+            -p "$DEPLOY_PORT" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "PSCPT_DEPLOY_REF='$DEPLOY_REF' /home/fitrah/apps/pscpt/scripts/deploy.sh"
+
+  deploy-production:
+    name: deploy production
+    if: >-
+      ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/prod-')) ||
+          (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Verify release before deploy
+        run: |
+          files="$(gofmt -l $(find . -name '*.go' -not -path './.git/*'))"
+          if [ -n "$files" ]; then
+            echo "$files"
+            exit 1
+          fi
+          go test ./...
+          npm ci --prefix web
+          npm run build --prefix web
+          mkdir -p ../secrets
+          cat > ../secrets/pscpt.env <<'EOF'
+          PSCPT_DSN=pscpt:pscpt@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true
+          PSCPT_APP_URL=http://localhost:8080
+          PSCPT_SESSION_SECRET=ci-session-secret
+          MYSQL_PASSWORD=pscpt
+          MYSQL_ROOT_PASSWORD=pscpt_root
+          EOF
+          : > ../secrets/emica.env
+          docker compose -f docker-compose.yml config --quiet
+
+      - name: Install SSH key
+        env:
+          DEPLOY_KEY: ${{ secrets.PSCPT_PROD_DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.PSCPT_PROD_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.PSCPT_PROD_DEPLOY_PORT }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/pscpt_prod_deploy
+          chmod 600 ~/.ssh/pscpt_prod_deploy
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.PSCPT_PROD_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.PSCPT_PROD_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.PSCPT_PROD_DEPLOY_USER }}
+          DEPLOY_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+        run: |
+          ssh -i ~/.ssh/pscpt_prod_deploy \
+            -p "$DEPLOY_PORT" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "PSCPT_DEPLOY_REF='$DEPLOY_REF' /home/fitrah/apps/pscpt/scripts/deploy.sh"

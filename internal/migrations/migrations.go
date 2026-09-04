@@ -85,6 +85,17 @@ CREATE TABLE IF NOT EXISTS sales_performance_rows (
   KEY idx_sales_run (run_id),
   FOREIGN KEY (run_id) REFERENCES source_runs(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS ps_month_snapshots (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  period CHAR(7) NOT NULL,
+  status VARCHAR(40) NOT NULL DEFAULT 'draft',
+  source_summary JSON NULL,
+  created_by BIGINT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_period (period),
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
 CREATE TABLE IF NOT EXISTS ps_month_rows (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   snapshot_id BIGINT NOT NULL,
@@ -110,16 +121,5 @@ CREATE TABLE IF NOT EXISTS ps_month_rows (
   KEY idx_period_ps (period, ps_employee_id),
   KEY idx_aec_region (aec, region),
   FOREIGN KEY (snapshot_id) REFERENCES ps_month_snapshots(id) ON DELETE CASCADE
-);
-CREATE TABLE IF NOT EXISTS ps_month_snapshots (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  period CHAR(7) NOT NULL,
-  status VARCHAR(40) NOT NULL DEFAULT 'draft',
-  source_summary JSON NULL,
-  created_by BIGINT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uniq_period (period),
-  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 `

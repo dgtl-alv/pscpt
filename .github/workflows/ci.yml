@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['prod-*']
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Check gofmt
+        run: |
+          files="$(gofmt -l $(find . -name '*.go' -not -path './.git/*'))"
+          if [ -n "$files" ]; then
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Go test
+        run: go test ./...
+
+      - name: Frontend install
+        working-directory: web
+        run: npm ci
+
+      - name: Frontend build
+        working-directory: web
+        run: npm run build
+
+      - name: Check whitespace
+        run: git diff --check
+
+      - name: Validate Docker Compose
+        run: |
+          mkdir -p ../secrets
+          cat > ../secrets/pscpt.env <<'EOF'
+          PSCPT_DSN=pscpt:pscpt@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true
+          PSCPT_APP_URL=http://localhost:8080
+          PSCPT_SESSION_SECRET=ci-session-secret
+          MYSQL_PASSWORD=pscpt
+          MYSQL_ROOT_PASSWORD=pscpt_root
+          EOF
+          : > ../secrets/emica.env
+          docker compose -f docker-compose.yml config --quiet

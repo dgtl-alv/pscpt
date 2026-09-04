@@ -5,12 +5,10 @@ services:
     ports:
       - "8091:8080"
     env_file:
+      - ../secrets/pscpt.env
       - ../secrets/emica.env
     environment:
       PSCPT_ADDR: ":8080"
-      PSCPT_DSN: "pscpt:pscpt@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true"
-      PSCPT_APP_URL: "https://pscpt.ilectraev.com"
-      PSCPT_SESSION_SECRET: "change-me-in-production"
     depends_on:
       db:
         condition: service_healthy
@@ -20,15 +18,15 @@ services:
     container_name: pscpt-db
     ports:
       - "3308:3306"
+    env_file:
+      - ../secrets/pscpt.env
     environment:
       MYSQL_DATABASE: pscpt
       MYSQL_USER: pscpt
-      MYSQL_PASSWORD: pscpt
-      MYSQL_ROOT_PASSWORD: pscpt_root
     volumes:
       - pscpt_mysql:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-upscpt", "-ppscpt"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u\"$${MYSQL_USER}\" -p\"$${MYSQL_PASSWORD}\""]
       interval: 10s
       timeout: 5s
       retries: 10

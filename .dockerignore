@@ -1,0 +1,10 @@
+.git
+.github
+graphify-out
+tmp
+*.log
+.env
+web/node_modules
+web/dist
+node_modules
+dist
