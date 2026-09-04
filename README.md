@@ -38,6 +38,7 @@ curl http://localhost:8091/api/health
 - Change password
 - Authenticated dashboard shell
 - Initial PS-month analysis preview API
+- Source intake with two lanes for sales performance: `.xlsx` upload and Emica/Odoo API sync
 
 ## Environment
 
@@ -47,3 +48,10 @@ Default Docker values are development values. Change before production:
 - `MYSQL_PASSWORD`
 - `MYSQL_ROOT_PASSWORD`
 - `PSCPT_APP_URL`
+- `EMICA_BASE_URL`
+- `EMICA_ODOO_DB`
+- `EMICA_ODOO_USERNAME`
+- `EMICA_ODOO_API_KEY` or `EMICA_ODOO_PASSWORD`
+- `EMICA_TIMEOUT`
+
+The Emica sync calls Odoo's external API flow with `authenticate` and `execute_kw`/`search_read`, matching the official Odoo integration pattern.

@@ -1,6 +1,7 @@
 package httpapp
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"pscpt/internal/auth"
 	"pscpt/internal/config"
 	"pscpt/internal/psmonth"
+	"pscpt/internal/sources"
 	"pscpt/internal/uploads"
 )
 
@@ -43,6 +45,9 @@ func (a App) Handler() http.Handler {
 	mux.HandleFunc("/api/dashboard/summary", a.requireAuth(a.summary))
 	mux.HandleFunc("/api/uploads/manual", a.requireAuth(a.uploadManual))
 	mux.HandleFunc("/api/uploads/manual/list", a.requireAuth(a.listManualUploads))
+	mux.HandleFunc("/api/sources/sales/upload", a.requireAuth(a.uploadSalesPerformance))
+	mux.HandleFunc("/api/sources/sales/sync", a.requireAuth(a.syncSalesPerformance))
+	mux.HandleFunc("/api/sources/runs", a.requireAuth(a.listSourceRuns))
 	mux.HandleFunc("/api/analysis/preview", a.requireAuth(a.preview))
 	mux.HandleFunc("/api/analysis/correlation", a.requireAuth(a.runCorrelation))
 	mux.HandleFunc("/api/ps-month/snapshots", a.requireAuth(a.listPSMonthSnapshots))
@@ -255,12 +260,12 @@ func (a App) createPSMonthSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "period must use YYYY-MM")
 		return
 	}
-	id, err := psmonth.CreateSnapshot(a.DB, in.Period, u.ID)
+	summary, err := psmonth.CreateSnapshot(a.DB, in.Period, u.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "create snapshot failed: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "period": in.Period})
+	writeJSON(w, http.StatusCreated, summary)
 }
 
 func (a App) listPSMonthSnapshots(w http.ResponseWriter, r *http.Request) {
@@ -297,8 +302,8 @@ func (a App) uploadManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kind := r.FormValue("type")
-	if kind != "individual_factor" && kind != "leadership" {
-		writeError(w, http.StatusBadRequest, "type must be individual_factor or leadership")
+	if kind != "individual_factor" && kind != "individual_capability" && kind != "sales_performance" {
+		writeError(w, http.StatusBadRequest, "type must be individual_factor, individual_capability, or sales_performance")
 		return
 	}
 	file, header, err := r.FormFile("file")
@@ -344,6 +349,72 @@ func (a App) listManualUploads(w http.ResponseWriter, r *http.Request) {
 		items = append(items, map[string]any{"id": id, "type": kind, "filename": filename, "row_count": count, "created_at": created})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"uploads": items})
+}
+
+func (a App) uploadSalesPerformance(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	u, err := a.currentUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	period := r.FormValue("period")
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file required")
+		return
+	}
+	defer file.Close()
+	runID, columns, rows, err := sources.SaveSalesUpload(a.DB, period, file, header, u.ID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	preview := rows
+	if len(preview) > 5 {
+		preview = preview[:5]
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"id": runID, "type": "sales_performance", "mode": "upload_file", "period": period, "filename": header.Filename, "columns": columns, "row_count": len(rows), "preview": preview})
+}
+
+func (a App) syncSalesPerformance(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	u, err := a.currentUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	var in struct{ Period string }
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	runID, rows, err := sources.SyncOdooSalesOrders(ctx, a.DB, a.Cfg.Emica, in.Period, u.ID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	preview := rows
+	if len(preview) > 5 {
+		preview = preview[:5]
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"id": runID, "type": "sales_performance", "mode": "sync_api", "period": in.Period, "row_count": len(rows), "preview": preview})
+}
+
+func (a App) listSourceRuns(w http.ResponseWriter, r *http.Request) {
+	items, err := sources.ListRuns(a.DB)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "list source runs failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": items})
 }
 
 func (a App) summary(w http.ResponseWriter, r *http.Request) {
