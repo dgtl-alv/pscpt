@@ -7,6 +7,8 @@ func Run(db *sql.DB) error {
 		return err
 	}
 	_, _ = db.Exec(`ALTER TABLE ps_month_snapshots ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`)
+	_, _ = db.Exec(`ALTER TABLE manual_uploads MODIFY upload_type ENUM('individual_factor','individual_capability','sales_performance') NOT NULL`)
+	_, _ = db.Exec(`ALTER TABLE ps_month_rows ADD COLUMN individual_capability_json JSON NULL AFTER individual_factor_json`)
 	return nil
 }
 
@@ -38,7 +40,7 @@ CREATE TABLE IF NOT EXISTS audit_events (
 );
 CREATE TABLE IF NOT EXISTS manual_uploads (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  upload_type ENUM('individual_factor','leadership') NOT NULL,
+  upload_type ENUM('individual_factor','individual_capability','sales_performance') NOT NULL,
   filename VARCHAR(255) NOT NULL,
   columns_json JSON NOT NULL,
   rows_json JSON NOT NULL,
@@ -46,6 +48,42 @@ CREATE TABLE IF NOT EXISTS manual_uploads (
   uploaded_by BIGINT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS source_runs (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  source_type VARCHAR(80) NOT NULL,
+  mode VARCHAR(40) NOT NULL,
+  period CHAR(7) NOT NULL,
+  status VARCHAR(40) NOT NULL DEFAULT 'ok',
+  filename VARCHAR(255) NULL,
+  row_count INT NOT NULL DEFAULT 0,
+  summary_json JSON NULL,
+  error_text TEXT NULL,
+  created_by BIGINT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_source_period (source_type, period),
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS sales_performance_rows (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  run_id BIGINT NOT NULL,
+  period CHAR(7) NOT NULL,
+  ps_employee_id VARCHAR(80) NULL,
+  ps_name VARCHAR(180) NULL,
+  ps_email VARCHAR(190) NULL,
+  salesperson_name VARCHAR(180) NULL,
+  order_ref VARCHAR(120) NULL,
+  order_state VARCHAR(60) NULL,
+  order_date DATETIME NULL,
+  bike_model VARCHAR(180) NULL,
+  quantity DECIMAL(14,2) NULL,
+  amount_total DECIMAL(18,2) NULL,
+  raw_json JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_sales_period_ps (period, ps_employee_id),
+  KEY idx_sales_period_name (period, ps_name),
+  KEY idx_sales_run (run_id),
+  FOREIGN KEY (run_id) REFERENCES source_runs(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS ps_month_rows (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -58,6 +96,7 @@ CREATE TABLE IF NOT EXISTS ps_month_rows (
   region VARCHAR(120) NULL,
   employment_status VARCHAR(40) NULL,
   individual_factor_json JSON NULL,
+  individual_capability_json JSON NULL,
   capability_talenta_json JSON NULL,
   capability_moodle_json JSON NULL,
   capability_lead_json JSON NULL,

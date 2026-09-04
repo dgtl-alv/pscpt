@@ -4,10 +4,12 @@ services:
     container_name: pscpt-app
     ports:
       - "8091:8080"
+    env_file:
+      - ../secrets/emica.env
     environment:
       PSCPT_ADDR: ":8080"
       PSCPT_DSN: "pscpt:pscpt@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true"
-      PSCPT_APP_URL: "http://localhost:8091"
+      PSCPT_APP_URL: "https://pscpt.ilectraev.com"
       PSCPT_SESSION_SECRET: "change-me-in-production"
     depends_on:
       db:
