@@ -42,7 +42,7 @@ curl http://localhost:8091/api/health
 
 ## Environment
 
-Runtime secrets are loaded from `../secrets/pscpt.env` and `../secrets/emica.env`.
+Runtime secrets are loaded from `/opt/alva/secrets/<env>/pscpt.env` and `/opt/alva/secrets/<env>/emica.env`.
 Production needs at least:
 
 - `PSCPT_SESSION_SECRET`
@@ -95,5 +95,5 @@ PSCPT_PROD_DEPLOY_USER
 PSCPT_PROD_DEPLOY_SSH_KEY
 ```
 
-The server-side deploy command expects the app repository at `/home/fitrah/apps/pscpt`.
+The server-side deploy command expects app repositories at `/opt/alva/apps/staging/pscpt` and `/opt/alva/apps/prod/pscpt`.
 Override it on the server with `PSCPT_APP_DIR` if needed.

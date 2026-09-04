@@ -1,9 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${PSCPT_APP_DIR:-/home/fitrah/apps/pscpt}"
 REF="${1:-${PSCPT_DEPLOY_REF:-main}}"
-LOCAL_HEALTH="${PSCPT_LOCAL_HEALTH:-http://127.0.0.1:8091/api/health}"
+
+DEPLOY_ENV="${PSCPT_DEPLOY_ENV:-}"
+if [ -z "$DEPLOY_ENV" ]; then
+  case "$REF" in
+    prod-* | refs/tags/prod-*) DEPLOY_ENV="prod" ;;
+    *) DEPLOY_ENV="staging" ;;
+  esac
+fi
+
+APP_DIR="${PSCPT_APP_DIR:-/opt/alva/apps/${DEPLOY_ENV}/pscpt}"
+case "$DEPLOY_ENV" in
+  prod)
+    DEFAULT_APP_PORT="8001"
+    DEFAULT_DB_PORT="3309"
+    ;;
+  *)
+    DEFAULT_APP_PORT="8091"
+    DEFAULT_DB_PORT="3308"
+    ;;
+esac
+
+export ALVA_ENV="$DEPLOY_ENV"
+export COMPOSE_PROJECT_NAME="${PSCPT_COMPOSE_PROJECT:-pscpt_${DEPLOY_ENV}}"
+export PSCPT_HOST_BIND="${PSCPT_HOST_BIND:-127.0.0.1}"
+export PSCPT_HOST_PORT="${PSCPT_HOST_PORT:-$DEFAULT_APP_PORT}"
+export PSCPT_DB_HOST_BIND="${PSCPT_DB_HOST_BIND:-127.0.0.1}"
+export PSCPT_DB_HOST_PORT="${PSCPT_DB_HOST_PORT:-$DEFAULT_DB_PORT}"
+
+LOCAL_HEALTH="${PSCPT_LOCAL_HEALTH:-http://${PSCPT_HOST_BIND}:${PSCPT_HOST_PORT}/api/health}"
 
 compose() {
   if docker compose version >/dev/null 2>&1; then
@@ -15,6 +42,7 @@ compose() {
 
 cd "$APP_DIR"
 
+printf 'pscpt deploy: env %s\n' "$DEPLOY_ENV"
 printf 'pscpt deploy: fetch refs\n'
 git fetch --prune --tags origin
 

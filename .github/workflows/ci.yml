@@ -53,13 +53,13 @@ jobs:
 
       - name: Validate Docker Compose
         run: |
-          mkdir -p ../secrets
-          cat > ../secrets/pscpt.env <<'EOF'
+          mkdir -p ../../../secrets/staging
+          cat > ../../../secrets/staging/pscpt.env <<'EOF'
           PSCPT_DSN=pscpt:pscpt@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true
           PSCPT_APP_URL=http://localhost:8080
           PSCPT_SESSION_SECRET=ci-session-secret
           MYSQL_PASSWORD=pscpt
           MYSQL_ROOT_PASSWORD=pscpt_root
           EOF
-          : > ../secrets/emica.env
+          : > ../../../secrets/staging/emica.env
           docker compose -f docker-compose.yml config --quiet

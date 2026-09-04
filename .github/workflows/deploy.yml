@@ -61,7 +61,7 @@ jobs:
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "PSCPT_DEPLOY_REF='$DEPLOY_REF' /home/fitrah/apps/pscpt/scripts/deploy.sh"
+            "PSCPT_DEPLOY_ENV=staging PSCPT_APP_DIR=/opt/alva/apps/staging/pscpt PSCPT_DEPLOY_REF='$DEPLOY_REF' /opt/alva/apps/staging/pscpt/scripts/deploy.sh"
 
   deploy-production:
     name: deploy production
@@ -98,15 +98,15 @@ jobs:
           go test ./...
           npm ci --prefix web --no-audit --no-fund
           npm run build --prefix web
-          mkdir -p ../secrets
-          cat > ../secrets/pscpt.env <<'EOF'
+          mkdir -p ../../../secrets/staging
+          cat > ../../../secrets/staging/pscpt.env <<'EOF'
           PSCPT_DSN=pscpt:pscpt@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true
           PSCPT_APP_URL=http://localhost:8080
           PSCPT_SESSION_SECRET=ci-session-secret
           MYSQL_PASSWORD=pscpt
           MYSQL_ROOT_PASSWORD=pscpt_root
           EOF
-          : > ../secrets/emica.env
+          : > ../../../secrets/staging/emica.env
           docker compose -f docker-compose.yml config --quiet
 
       - name: Install SSH key
@@ -132,4 +132,4 @@ jobs:
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "PSCPT_DEPLOY_REF='$DEPLOY_REF' /home/fitrah/apps/pscpt/scripts/deploy.sh"
+            "PSCPT_DEPLOY_ENV=prod PSCPT_APP_DIR=/opt/alva/apps/prod/pscpt PSCPT_DEPLOY_REF='$DEPLOY_REF' /opt/alva/apps/prod/pscpt/scripts/deploy.sh"

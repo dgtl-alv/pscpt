@@ -1,12 +1,12 @@
 services:
   app:
     build: .
-    container_name: pscpt-app
+    container_name: "pscpt-${ALVA_ENV:-staging}-app"
     ports:
-      - "8091:8080"
+      - "${PSCPT_HOST_BIND:-127.0.0.1}:${PSCPT_HOST_PORT:-8091}:8080"
     env_file:
-      - ../secrets/pscpt.env
-      - ../secrets/emica.env
+      - ../../../secrets/${ALVA_ENV:-staging}/pscpt.env
+      - ../../../secrets/${ALVA_ENV:-staging}/emica.env
     environment:
       PSCPT_ADDR: ":8080"
     depends_on:
@@ -15,11 +15,11 @@ services:
     restart: unless-stopped
   db:
     image: mysql:8.4
-    container_name: pscpt-db
+    container_name: "pscpt-${ALVA_ENV:-staging}-db"
     ports:
-      - "3308:3306"
+      - "${PSCPT_DB_HOST_BIND:-127.0.0.1}:${PSCPT_DB_HOST_PORT:-3308}:3306"
     env_file:
-      - ../secrets/pscpt.env
+      - ../../../secrets/${ALVA_ENV:-staging}/pscpt.env
     environment:
       MYSQL_DATABASE: pscpt
       MYSQL_USER: pscpt
