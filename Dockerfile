@@ -14,7 +14,7 @@ COPY . ./
 COPY --from=frontend /src/web/dist ./web/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/pscpt ./cmd/server
 
-FROM alpine:3.21
+FROM alpine:3.24
 WORKDIR /app
 RUN apk add --no-cache ca-certificates tzdata
 COPY --from=backend /out/pscpt /app/pscpt
