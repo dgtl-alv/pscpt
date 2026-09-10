@@ -31,6 +31,9 @@ jobs:
           go test ./...
           npm ci --prefix web --no-audit --no-fund
           npm run build --prefix web
+          mkdir -p /home/runner/secrets/staging
+          touch /home/runner/secrets/staging/pscpt.env
+          touch /home/runner/secrets/staging/emica.env
           PSCPT_DSN='user:required-secret@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true' \
           PSCPT_SESSION_SECRET='required-secret' MYSQL_PASSWORD='required-secret' \
           MYSQL_ROOT_PASSWORD='required-secret' docker compose config --quiet
