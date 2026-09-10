@@ -1,13 +1,11 @@
 module pscpt
 
-go 1.23.0
-
-toolchain go1.23.12
+go 1.26.0
 
 require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/xuri/excelize/v2 v2.9.1
-	golang.org/x/crypto v0.38.0
+	golang.org/x/crypto v0.56.0
 )
 
 require (
@@ -17,6 +15,6 @@ require (
 	github.com/tiendc/go-deepcopy v1.6.0 // indirect
 	github.com/xuri/efp v0.0.1 // indirect
 	github.com/xuri/nfp v0.0.1 // indirect
-	golang.org/x/net v0.40.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )
