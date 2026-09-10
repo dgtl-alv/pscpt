@@ -1,0 +1,6 @@
+# Compliance-sensitive delivery files
+/.github/ @dgtl-alv/platform
+/scripts/deploy.sh @dgtl-alv/platform
+/Dockerfile @dgtl-alv/platform
+/docker-compose.yml @dgtl-alv/platform
+/internal/config/ @dgtl-alv/platform

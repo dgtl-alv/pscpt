@@ -1,65 +1,40 @@
-name: CI
+name: PR validation
 
 on:
   pull_request:
-  push:
-    branches: [main]
-    tags: ['prod-*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    name: test
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.23.x'
           cache: true
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: web/package-lock.json
-
-      - name: Check gofmt
+      - name: Validate
         run: |
-          files="$(gofmt -l $(find . -name '*.go' -not -path './.git/*'))"
-          if [ -n "$files" ]; then
-            echo "$files"
-            exit 1
-          fi
-
-      - name: Go test
-        run: go test ./...
-
-      - name: Frontend install
-        working-directory: web
-        timeout-minutes: 5
-        run: npm ci --no-audit --no-fund
-
-      - name: Frontend build
-        working-directory: web
-        run: npm run build
-
-      - name: Check whitespace
-        run: git diff --check
-
-      - name: Validate Docker Compose
-        run: |
-          mkdir -p ../../../secrets/staging
-          cat > ../../../secrets/staging/pscpt.env <<'EOF'
-          PSCPT_DSN=pscpt:pscpt@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true
-          PSCPT_APP_URL=http://localhost:8080
-          PSCPT_SESSION_SECRET=ci-session-secret
-          MYSQL_PASSWORD=pscpt
-          MYSQL_ROOT_PASSWORD=pscpt_root
-          EOF
-          : > ../../../secrets/staging/emica.env
-          docker compose -f docker-compose.yml config --quiet
+          test -z "$(gofmt -l $(find . -name '*.go' -not -path './.git/*'))"
+          go test ./...
+          npm ci --prefix web --no-audit --no-fund
+          npm run build --prefix web
+          mkdir -p /home/runner/secrets/staging
+          touch /home/runner/secrets/staging/pscpt.env
+          touch /home/runner/secrets/staging/emica.env
+          PSCPT_DSN='user:required-secret@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true' \
+          PSCPT_SESSION_SECRET='required-secret' MYSQL_PASSWORD='required-secret' \
+          MYSQL_ROOT_PASSWORD='required-secret' docker compose config --quiet
+          git diff --check

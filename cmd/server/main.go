@@ -11,7 +11,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
 	database, err := db.Open(cfg.DSN)
 	if err != nil {
 		log.Fatal(err)

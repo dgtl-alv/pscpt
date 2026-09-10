@@ -1,135 +1,71 @@
 name: Deploy
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
   push:
+    branches: [main]
     tags: ['prod-*']
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: Deploy target
-        required: true
-        default: staging
-        type: choice
-        options:
-          - staging
-          - production
-      ref:
-        description: Branch or tag to deploy
-        required: false
-        default: main
-        type: string
 
-concurrency:
-  group: pscpt-${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/prod-') && 'production' || inputs.environment || 'staging' }}
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
-  deploy-staging:
-    name: deploy staging
-    if: >-
-      ${{ (github.event_name == 'workflow_run' &&
-           github.event.workflow_run.conclusion == 'success' &&
-           github.event.workflow_run.event == 'push') ||
-          (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging') }}
+  staging:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: staging
+    concurrency:
+      group: pscpt-staging
+      cancel-in-progress: true
     steps:
-      - name: Install SSH key
-        env:
-          DEPLOY_KEY: ${{ secrets.PSCPT_STAGING_DEPLOY_SSH_KEY }}
-          DEPLOY_HOST: ${{ secrets.PSCPT_STAGING_DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.PSCPT_STAGING_DEPLOY_PORT }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/pscpt_staging_deploy
-          chmod 600 ~/.ssh/pscpt_staging_deploy
-          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-
-      - name: Deploy over SSH
+      - name: Deploy immutable main SHA
         env:
           DEPLOY_HOST: ${{ secrets.PSCPT_STAGING_DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.PSCPT_STAGING_DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.PSCPT_STAGING_DEPLOY_USER }}
-          DEPLOY_REF: ${{ inputs.ref || 'main' }}
+          DEPLOY_KEY: ${{ secrets.PSCPT_STAGING_DEPLOY_SSH_KEY }}
+          DEPLOY_SHA: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/pscpt_staging_deploy \
-            -p "$DEPLOY_PORT" \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+          set -euo pipefail
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PORT" && test -n "$DEPLOY_USER" && test -n "$DEPLOY_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -p "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "PSCPT_DEPLOY_ENV=staging PSCPT_APP_DIR=/opt/alva/apps/staging/pscpt PSCPT_DEPLOY_REF='$DEPLOY_REF' /opt/alva/apps/staging/pscpt/scripts/deploy.sh"
+            "PSCPT_DEPLOY_ENV=staging PSCPT_APP_DIR=/opt/alva/apps/staging/pscpt PSCPT_DEPLOY_REF='$DEPLOY_SHA' /opt/alva/apps/staging/pscpt/scripts/deploy.sh"
 
-  deploy-production:
-    name: deploy production
-    if: >-
-      ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/prod-')) ||
-          (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') }}
+  production:
+    if: startsWith(github.ref, 'refs/tags/prod-')
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 20
+    concurrency:
+      group: pscpt-production
+      cancel-in-progress: false
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23.x'
-          cache: true
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Verify release before deploy
-        run: |
-          files="$(gofmt -l $(find . -name '*.go' -not -path './.git/*'))"
-          if [ -n "$files" ]; then
-            echo "$files"
-            exit 1
-          fi
-          go test ./...
-          npm ci --prefix web --no-audit --no-fund
-          npm run build --prefix web
-          mkdir -p ../../../secrets/staging
-          cat > ../../../secrets/staging/pscpt.env <<'EOF'
-          PSCPT_DSN=pscpt:pscpt@tcp(db:3306)/pscpt?parseTime=true&multiStatements=true
-          PSCPT_APP_URL=http://localhost:8080
-          PSCPT_SESSION_SECRET=ci-session-secret
-          MYSQL_PASSWORD=pscpt
-          MYSQL_ROOT_PASSWORD=pscpt_root
-          EOF
-          : > ../../../secrets/staging/emica.env
-          docker compose -f docker-compose.yml config --quiet
-
-      - name: Install SSH key
+      - name: Validate immutable release tag
         env:
-          DEPLOY_KEY: ${{ secrets.PSCPT_PROD_DEPLOY_SSH_KEY }}
-          DEPLOY_HOST: ${{ secrets.PSCPT_PROD_DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.PSCPT_PROD_DEPLOY_PORT }}
+          DEPLOY_TAG: ${{ github.ref_name }}
+          DEPLOY_SHA: ${{ github.sha }}
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/pscpt_prod_deploy
-          chmod 600 ~/.ssh/pscpt_prod_deploy
-          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
-
-      - name: Deploy over SSH
+          set -euo pipefail
+          [[ "$DEPLOY_TAG" =~ ^prod-[0-9]{4}-[0-9]{2}-[0-9]{2}-[1-9][0-9]*$ ]]
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+      - name: Deploy approved immutable tag and SHA
         env:
           DEPLOY_HOST: ${{ secrets.PSCPT_PROD_DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.PSCPT_PROD_DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.PSCPT_PROD_DEPLOY_USER }}
-          DEPLOY_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+          DEPLOY_KEY: ${{ secrets.PSCPT_PROD_DEPLOY_SSH_KEY }}
+          DEPLOY_TAG: ${{ github.ref_name }}
+          DEPLOY_SHA: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/pscpt_prod_deploy \
-            -p "$DEPLOY_PORT" \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+          set -euo pipefail
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_PORT" && test -n "$DEPLOY_USER" && test -n "$DEPLOY_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -p "$DEPLOY_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "PSCPT_DEPLOY_ENV=prod PSCPT_APP_DIR=/opt/alva/apps/prod/pscpt PSCPT_DEPLOY_REF='$DEPLOY_REF' /opt/alva/apps/prod/pscpt/scripts/deploy.sh"
+            "PSCPT_DEPLOY_ENV=prod PSCPT_APP_DIR=/opt/alva/apps/prod/pscpt PSCPT_DEPLOY_REF='$DEPLOY_SHA' PSCPT_DEPLOY_TAG='$DEPLOY_TAG' /opt/alva/apps/prod/pscpt/scripts/deploy.sh"
