@@ -1,4 +1,4 @@
-FROM node:22-alpine AS frontend
+FROM node:25-alpine AS frontend
 WORKDIR /src/web
 COPY web/package*.json ./
 RUN npm ci --no-audit --no-fund
